@@ -13,7 +13,7 @@ static var _next_attack_allowed_time_ms: int = 0
 @export_range(1.0, 20.0, 0.5) var decelerate_speed: float = 5.0
 
 # Cooldown between attacks in milliseconds.
-@export var attack_cooldown_ms: int = 10
+@export var attack_cooldown_ms: int = 100
 
 # Sibling states under the StateMachine node.
 @onready var idle: State_Idle = $"../Idle"
@@ -28,8 +28,14 @@ static var _next_attack_allowed_time_ms: int = 0
 # Audio player for attack sound.
 @onready var audio: AudioStreamPlayer2D = $"../../Audio/AudioStreamPlayer2D"
 
+# Player's attack HurtBox.
+@onready var hurt_box: HurtBox = $"../../Interactions/HurtBox"
+
 
 func Enter() -> void:
+	# Ensure HurtBox is off until confirmation a valid attack start.
+	hurt_box.monitoring = false
+
 	# Check global cooldown before starting a new attack.
 	var now_ms: int = Time.get_ticks_msec()
 	if now_ms < _next_attack_allowed_time_ms:
@@ -41,8 +47,13 @@ func Enter() -> void:
 
 	# Start a real attack.
 	attacking = true
+	
+	await get_tree().create_timer( 0.075 ).timeout
 
-	# Update facing direction from current input if any.
+	# Enable HurtBox only while actually attacking.
+	hurt_box.monitoring = true
+
+	# Update facing direction from current input.
 	if player.direction != Vector2.ZERO:
 		player.SetDirection()
 
@@ -55,7 +66,7 @@ func Enter() -> void:
 	if effect_anim != null and effect_anim.has_animation(effect_name):
 		effect_anim.play(effect_name)
 
-	# Play attack sound if one is assigned.
+	# Play attack sound.
 	if attack_sound:
 		audio.stream = attack_sound
 		audio.pitch_scale = randf_range(0.9, 1.1)
@@ -71,7 +82,10 @@ func Exit() -> void:
 	if body_anim.animation_finished.is_connected(_on_body_animation_finished):
 		body_anim.animation_finished.disconnect(_on_body_animation_finished)
 
+	# Attack is over; ensure HurtBox is disabled.
+	hurt_box.monitoring = false
 	attacking = false
+
 	# Make sure we're not drifting after leaving this state.
 	player.velocity = Vector2.ZERO
 
@@ -103,7 +117,7 @@ func Physics(_delta: float) -> State:
 
 
 func HandleInput(_event: InputEvent) -> State:
-	# Add combo/buffer logic here later if you want.
+	# Add combo/buffer logic here later.
 	return null
 
 
@@ -111,6 +125,9 @@ func _on_body_animation_finished(anim_name: StringName) -> void:
 	# Only end the attack when an Attack_* animation finishes.
 	if anim_name.begins_with("Attack_"):
 		attacking = false
+
+		# As soon as the swing is done, turn off the HurtBox.
+		hurt_box.monitoring = false
 
 		# Set the global cooldown so the next attack can't start
 		# until `attack_cooldown_ms` has passed.

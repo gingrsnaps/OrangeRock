@@ -1,17 +1,19 @@
 extends CharacterBody2D
 class_name Player
 
+# Fired whenever the player's facing direction (cardinal_direction) changes.
+signal DirectionChanged(new_direction: Vector2)
+
 # Movement speed in pixels per second.
 @export var move_speed: float = 100.0
 
 # Last facing direction (cardinal only: LEFT/RIGHT/UP/DOWN).
 var cardinal_direction: Vector2 = Vector2.DOWN
 
-# Raw movement input for this frame.
+# Raw movement input for this frame (can be diagonal, normalized in _process).
 var direction: Vector2 = Vector2.ZERO
 
-# Optional debug/state label; not used by logic, but
-# useful for debugging or on-screen UI.
+# Optional debug/state label; not used by logic, but useful for debugging or UI.
 var state_name: String = "idle"
 
 # Cached node references.
@@ -24,7 +26,7 @@ func _ready() -> void:
 	# Hook the player into its state machine.
 	# This:
 	#   - Sets State.player = self
-	#   - Collects State children (Idle, Walk, etc.)
+	#   - Collects State children (Idle, Walk, Attack, etc.)
 	#   - Enters the initial state (first child, typically Idle)
 	state_machine.Initialize(self)
 
@@ -47,6 +49,7 @@ func _process(_delta: float) -> void:
 
 func _physics_process(_delta: float) -> void:
 	# The states are responsible for setting `velocity`.
+	# Apply it each physics frame.
 	move_and_slide()
 
 
@@ -73,6 +76,9 @@ func SetDirection() -> bool:
 	# Flip sprite horizontally when facing LEFT.
 	sprite_2d.scale.x = -1.0 if cardinal_direction == Vector2.LEFT else 1.0
 
+	# Notify listeners (e.g. PlayerInteractionsHost) that our facing changed.
+	DirectionChanged.emit(new_dir)
+
 	return true
 
 
@@ -83,7 +89,7 @@ func UpdateAnimation(state_str: String) -> void:
 	#   "idle", "walk", "attack"
 	state_name = state_str  # For debugging/GUI.
 
-	var anim_name := state_str.capitalize() + "_" + AnimDirection()
+	var anim_name: String = state_str.capitalize() + "_" + AnimDirection()
 	animation_player.play(anim_name)
 
 
